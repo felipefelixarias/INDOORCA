@@ -1,7 +1,7 @@
-Python bindings for Optimal Reciprocal Collision Avoidance
+Indoor ORCA-based Simulator
 ==========================================================
 
-This repository contains a fork of the Python bindings for Optimal Reciprocal Collision Avoidance but adds functions for generating an environment from a traversability map and necessary functions for simulating the agents in said map.
+[UNDER CONSTRUCTION] This repository contains a fork of the Python bindings for Optimal Reciprocal Collision Avoidance but adds functions for generating an environment from a traversability map and necessary functions for simulating the agents in said map.
 
 This repository contains the RVO2 framework, as described below, along with
 [Cython](http://cython.org/)-based Python bindings. Its home is
