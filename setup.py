@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext as _build_ext
 from Cython.Build import cythonize
 
@@ -31,7 +31,7 @@ extensions = [
 ]
 
 setup(
-    name="pyrvo2",
+    name="indoorca",
     ext_modules=cythonize(extensions),
     cmdclass={'build_ext': BuildRvo2Ext},
     classifiers=[
@@ -48,4 +48,18 @@ setup(
         'Topic :: Games/Entertainment :: Simulation',
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
+    packages=find_packages(exclude=('test*',)),
+    include_package_data=True,
+    install_requires=[
+        'numpy>=1.19.5',
+        'Cython==0.21.1',
+        'jupyter>=1.0.0',
+        'jupytext>=1.2.0',
+        'Pillow>=5.4.0',
+        'networkx>=2.0',
+        'opencv-python>=3.4.8',
+        'matplotlib==3.3.4',
+        'shapely==1.7.1',
+        'scikit-image==0.17.2'
+    ]
 )

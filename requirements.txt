@@ -1,1 +1,30 @@
+# Library dependencies for Python code.  You need to install these with
+# `pip install -r requirements.txt` or
+# `conda install --file requirements.txt`
+
+#### ESSENTIAL LIBRARIES
+
+# General scientific computing
+
+numpy>=1.19.5
 Cython==0.21.1
+
+# Image processing
+
+Pillow>=5.4.0
+opencv-python>=3.4.8
+scikit-image==0.17.2
+
+#Jupyter notebooks
+
+jupyter>=1.0.0
+jupytext>=1.2.0
+
+# Graph utilities
+
+networkx>=2.0
+shapely==1.7.1
+
+# Visualization
+
+matplotlib==3.3.4

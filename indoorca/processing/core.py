@@ -4,7 +4,8 @@ from typing import List, NamedTuple
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import measure
-from shapely import Polygon, MultiPolygon, Point
+from shapely.geometry import Polygon, MultiPolygon, Point
+
 
 
 class MapProcessor:

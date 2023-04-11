@@ -1,9 +1,11 @@
 import logging
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Tuple
 
 import numpy as np
 import rvo2
 
+from indoorca.environment.core import Environment
+from indoorca.processing.core import MapProcessor
 
 class IndoorOrcaSimConfig(NamedTuple):
     """ A wrapper for RVO2 simulator with additional functions for processing a binary traversability map and navigation. 
@@ -43,7 +45,7 @@ class IndoorOrcaSimConfig(NamedTuple):
     time_horizon_obst: float = 2
     radius: float = 0.4
     max_speed: float = 2
-    velocity: List[float] = None
+    velocity: Tuple[float] = (0.,0.)
 
 
 class IndoorORCASim:
@@ -61,9 +63,13 @@ class IndoorORCASim:
     """
     def __init__(self, config: IndoorOrcaSimConfig):
         self.config = config
-        self.sim = rvo2.PyRVOSimulator(config.time_step, config.neighbor_dist, config.max_neighbors, config.time_horizon, 
+        self.sim = rvo2.PyRVOSimulator(config.time_step, config.neighbor_dist, config.max_neighbors, config.time_horizon,
                                        config.time_horizon_obst, config.radius, config.max_speed, config.velocity)
-    
+
+        self.environment = None
+        self.obstacles = None
+
+
     def add_agent(self, position: List[float], velocity: List[float] = None) -> int:
         """ Adds an agent to the simulation.
         
