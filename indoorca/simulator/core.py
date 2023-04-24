@@ -7,7 +7,7 @@ import rvo2
 from indoorca.environment.core import Environment
 from indoorca.processing.core import MapProcessor
 
-class IndoorOrcaSimConfig(NamedTuple):
+class IndoorORCASimConfig(NamedTuple):
     """ A wrapper for RVO2 simulator with additional functions for processing a binary traversability map and navigation. 
     
     Parameters
@@ -68,6 +68,23 @@ class IndoorORCASim:
 
         self.environment = None
         self.obstacles = None
+        self._no_steps = True
+        self.trajectories = []
+
+    def reset(self, environment: Environment) -> None:
+        """ Resets the simulation.
+
+        Parameters
+        ----------
+        environment :
+            The environment to be simulated
+        """
+        self.environment = environment
+        self.sim.clearAgents()
+        # self.sim.clearObstacles()
+        # self.obstacles = MapProcessor.process_map(self.environment.map)
+        self._no_steps = True
+        self.trajectories = []
 
 
     def add_agent(self, position: List[float], velocity: List[float] = None) -> int:
@@ -85,8 +102,7 @@ class IndoorORCASim:
         int : 
             The number of the agent
         """
-        return self.sim.addAgent(position, self.config.neighbor_dist, self.config.max_neighbors, self.config.time_horizon, 
-                                 self.config.time_horizon_obst, self.config.radius, self.config.max_speed, velocity)
+        return self.sim.addAgent(position)
     
     def add_obstacle(self, vertices: List[List[float]]) -> int:
         """ Adds an obstacle to the simulation.
@@ -205,6 +221,16 @@ class IndoorORCASim:
     def do_step(self) -> None:
         """ Performs a simulation step and updates the two-dimensional position and two-dimensional velocity of each agent.
         """
+        #Add current positions to trajectories, if first step, loop over all agents and create new trajectory
+        if self._no_steps:
+            for i in range(self.get_num_agents()):
+                self.trajectories.append([])
+                self.trajectories[i].append(list(self.get_agent_position(i)))
+            self._no_steps = False
+        else:
+            for i in range(self.get_num_agents()):
+                self.trajectories[i].append(list(self.get_agent_position(i)))
+
         self.sim.doStep()
     
 

@@ -13,8 +13,8 @@ __version__ = "0.1.0"
 #Global variables in meters
 pix_per_meter = 100
 agent_radius = 1.5
-max_agent_radius = ceil(agent_radius)
-min_agent_radius = round(agent_radius)
+max_agent_radius = ceil(agent_radius)*pix_per_meter//10
+min_agent_radius = round(agent_radius)*pix_per_meter//10
 agent_diameter = max_agent_radius + min_agent_radius
 # agent_mask = rint(make_gaussian(agent_diameter, fwhm=agent_diameter))
 

@@ -172,37 +172,25 @@ class Environment:
             simplified_polygons = self._simplify_polygon(polygon, tolerance)
             polygons.extend(simplified_polygons)
 
+
+        #Get the obstacle vertices in pixel space, they are currently in range (-1,1)
+        pixel_coords = []
+        for polygon in polygons:
+            obstacle = []
+            for coord in polygon.exterior.coords:
+                #Transform coordinates from range (-1,1) to (0,1)
+                coord = np.asarray(coord)
+                coord = (coord + 1) / 2
+                #Transform coordinates from range (0,1) to (0, width/height)
+                coord = coord * np.asarray([binary_map.shape[1]-1, binary_map.shape[0]-1])
+                obstacle.append(coord)
+            pixel_coords.append(obstacle)
+
+
+
+        #Add the polygons to the obstacles list
+        self.obstacles_pixels.extend(pixel_coords)
         return polygons
-    
-    def _new_construct_obstacle_map(self)->None:
-        # Initialize an empty binary map
-        height = self.map.shape[0]
-        width = self.map.shape[1]
-
-        #Initialize map as all freespace
-        self.obstacle_map = np.ones((height, width)) * indoorca.free_space
-
-        # Draw the obstacles on the traversability map
-        for obstacle in self.obstacles_meters:
-            # Convert the obstacle vertices from meters to pixels and shift the origin
-            obstacle_pixels = [(int((x * self.pix_per_meter) + width // 2), int(height - ((y * self.pix_per_meter) + height // 2))) for x, y in obstacle]
-
-            # Create a polygon object for the obstacle
-            obstacle_polygon = Polygon(obstacle_pixels)
-
-            # Create a bounding box around the obstacle
-            bbox = Bbox.from_bounds(obstacle_polygon.get_extents().xmin, obstacle_polygon.get_extents().ymin,
-                                    obstacle_polygon.get_extents().width, obstacle_polygon.get_extents().height)
-
-            # Generate a grid of points inside the bounding box
-            y, x = np.mgrid[int(bbox.ymin):int(bbox.ymax), int(bbox.xmin):int(bbox.xmax)]
-            points = np.vstack((x.flatten(), y.flatten())).T
-
-            # Check if the points are inside the obstacle polygon
-            is_inside = np.array([obstacle_polygon.contains_point(point) for point in points]).reshape(y.shape)
-
-            # Set the points inside the obstacle polygon to 0 (non-traversable)
-            traversability_map[int(bbox.ymin):int(bbox.ymax), int(bbox.xmin):int(bbox.xmax)][is_inside] = 0
 
 
     def _construct_obstacle_map(self)->None:
@@ -213,7 +201,7 @@ class Environment:
         width = self.map.shape[1]
 
         #Initialize map as all freespace
-        self.obstacle_map = np.ones((height, width)) * indoorca.free_space
+        self.obstacle_map = np.ones((height, width), dtype=np.int32) #* indoorca.free_space
 
         # for obstacle in self.obstacles:
         #     # Convert the obstacle vertices from meters to pixels
@@ -238,13 +226,11 @@ class Environment:
 
 
         # Iterate through each polygon
-        for obstacle in self.obstacles_meters:
+        for obs_pixel in self.obstacles_pixels:
             # Convert the meter coordinates to pixels
-            pixel_coords = np.array([self._world_to_map(np.asarray(coord)) for coord in obstacle], dtype=np.int32)
 
-            print(pixel_coords)
             # Fill the obstacle polygon with 0 (non-traversable)
-            cv2.fillPoly(self.obstacle_map, pixel_coords, indoorca.obstacle_space)
+            cv2.fillPoly(self.obstacle_map, np.array(obs_pixel, dtype=np.int32), 0)#indoorca.obstacle_space)
             # Account for origin being at center of image
 
             # pixel_coords = [(coord[0] * (width - 1) / 2, coord[1] * (height - 1) / 2) for coord in pixel_coords]
@@ -273,18 +259,11 @@ class Environment:
         List[List[Tuple[float]]] :
             List of obstacles' vertices for the simulator
         """
-        converted_polygons = []
+        
+        for obs_pixel in self.obstacles_pixels:
+            obs_meter = self._map_to_world(np.asarray(obs_pixel))
+            self.obstacles_meters.append(obs_meter.tolist())
 
-
-        for polygon in self._obstacles_polygons:
-            # Convert coordinates to meters
-            meter_coords = [(coord[0] * self.pix_per_meter / 2, coord[1] * self.pix_per_meter / 2) for coord in polygon.exterior.coords]
-
-            # Append the list of tuples (coordinates) to the converted_polygons list
-            converted_polygons.append(meter_coords)
-
-        self.obstacles_meters = converted_polygons
-    
 
     def display_map_with_polygons(self, polygon_color: str='red')-> None:
         """ Display the binary map with the polygons.
@@ -331,8 +310,23 @@ class Environment:
         """        
 
         axis = 0 if len(xy.shape) == 1 else 1
-        return np.flip((xy - np.array(self.trav_map.shape)/2.0)
+        ret = np.flip((xy - np.array(self.map.shape)/2.0)
                         /indoorca.pix_per_meter, axis=axis)
+        
+        #Raise exceptions if the point is outside the map
+        if np.any(ret[:, 0] < -self.map.shape[0]/2.0):
+            raise ValueError("Point is outside the map with a negative value in x.")
+        
+        if np.any(ret[:, 0] > self.map.shape[0]/2.0):
+            raise ValueError("Point is outside the map with a positive value in x.")
+        
+        if np.any(ret[:, 1] < -self.map.shape[1]/2.0):
+            raise ValueError("Point is outside the map with a negative value in y.")
+        
+        if np.any(ret[:, 1] > self.map.shape[1]/2.0):
+            raise ValueError("Point is outside the map with a positive value in y.")
+        
+        return ret
 
     def _world_to_map(self, xy: np.ndarray) -> np.ndarray:
         """Convert world coordinates to map coordinates
@@ -347,14 +341,18 @@ class Environment:
         """        
         ret = np.flip(xy*indoorca.pix_per_meter + 
                         np.array(self.map.shape)/2.0).astype(int)
-    
-        #check if any of the points are negative or greater than the map size, set them to 0 or the max size if necessary
-        ret[ret < 0] = 0
-
-        ret[ret >= self.map.shape[0]] = self.map.shape[0] - 1
-
+        
+        #Raise exceptions if the point is outside the map
+        if np.any(ret < 0):
+            raise ValueError("Point is outside the map with a value less than zero.")
+        
+        if np.any(ret[:, 0] >= self.map.shape[0]):
+            raise ValueError("Point is outside the map with a value greater than the map size.")
+        
+        if np.any(ret[:, 1] >= self.map.shape[1]):
+            raise ValueError("Point is outside the map with a value greater than the map size.")
+        
         return ret
-
 
     def shortest_path(self, 
                       source_world: np.ndarray, 
