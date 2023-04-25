@@ -107,6 +107,32 @@ class Environment:
             reachable_trav_map[node[0], node[1]] = indoorca.free_space
         
         return g, reachable_trav_map
+    
+    def get_random_point(self) -> List[float]:
+        """Return a random point in the environment
+
+        Returns
+        -------
+        List[int]
+            Random point in the environment
+        """     
+
+        #Check if the environment has been processed
+        if self.trav_map is None:
+            raise ValueError("Environment has not been processed yet")
+
+        #Check if the environment is all obstacle space
+        if np.all(self.trav_map == indoorca.obstacle_space):
+            raise ValueError("Environment is all obstacle space")
+          
+        while True:
+            point = [np.random.randint(0, self.map_size[0]), np.random.randint(0, self.map_size[1])]
+            if self.trav_map[point[0], point[1]] == indoorca.free_space:
+                #Convert to meters
+                point = self._map_to_world(np.array(point))
+                return point.aslist()
+            
+        
 
     def _simplify_polygon(self, polygon: Polygon, tolerance: float=0.02) -> List[Polygon]:
         """ Return the simplified polygon.

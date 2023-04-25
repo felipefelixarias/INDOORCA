@@ -39,7 +39,30 @@ class Agent():
         Load the object into pybullet
         """
         pass
+    """
+        collision_id = p.createCollisionShape(
+            p.GEOM_MESH,
+            fileName=self.collision_filename,
+            meshScale=[self.scale] * 3)
+        visual_id = p.createVisualShape(
+            p.GEOM_MESH,
+            fileName=self.visual_filename,
+            meshScale=[self.scale] * 3)
+        if self.visual_only:
+            body_id = p.createMultiBody(baseCollisionShapeIndex=-1,
+                                        baseVisualShapeIndex=visual_id)
+        else:
+            body_id = p.createMultiBody(baseMass=60,
+                                        baseCollisionShapeIndex=collision_id,
+                                        baseVisualShapeIndex=visual_id)
+        p.resetBasePositionAndOrientation(
+            body_id,
+            [0.0, 0.0, 0.0],
+            p.getQuaternionFromEuler(self.default_orn_euler)
+        )
+        return body_id
 
+    """
 
     def set_yaw(self, yaw):
         self.yaw = yaw
@@ -63,6 +86,7 @@ class Agent():
         euler_orientation = quat_orientation #p.getEulerFromQuaternion(quat_orientation)
 
         yaw = euler_orientation[2] - self.default_orn_euler[2]
+
 
         return yaw
 
@@ -144,6 +168,163 @@ class MultiAgentSim:
         self.offline_eval = False #self.config.get(
           #  'load_scene_episode_config', False)
 
+    '''
+        # scene_episode_config_path = None# self.config.get(
+          #  'scene_episode_config_name', None)
+        # Sanity check when loading our pre-sampled episodes
+        # Make sure the task simulation configuration does not conflict
+        # with the configuration used to sample our episode
+
+
+        # if self.offline_eval:
+        #     path = scene_episode_config_path
+        #     self.episode_config = \
+        #         SocialNavEpisodesConfig.load_scene_episode_config(path)
+        #     if self.num_pedestrians != self.episode_config.num_pedestrians:
+        #         raise ValueError("The episode samples did not record records for more than {} pedestrians".format(
+        #             self.num_pedestrians))
+        #     if env.scene.scene_id != self.episode_config.scene_id:
+        #         raise ValueError("The scene to run the simulation in is '{}' from the " " \
+        #                         scene used to collect the episode samples".format(
+        #             env.scene.scene_id))
+        #     if self.orca_radius != self.episode_config.orca_radius:
+        #         print("value of orca_radius: {}".format(
+        #               self.episode_config.orca_radius))
+        #         raise ValueError("The orca radius set for the simulation is {}, which is different from "
+        #                          "the orca radius used to collect the pedestrians' initial position "
+        #                          " for our samples.".format(self.orca_radius))
+
+
+# class SocialNavRandomTask(PointNavRandomTask):
+#     """
+#     Social Navigation Random Task
+#     The goal is to navigate to a random goal position, in the presence of pedestrians
+#     """
+
+#     def __init__(self, env):
+#         super(SocialNavRandomTask, self).__init__(env)
+
+#         # Detect pedestrian collision
+#         self.termination_conditions.append(PedestrianCollision(self.config))
+
+#         # Decide on how many pedestrians to load based on scene size
+#         # Each pixel is 0.01 square meter
+#         num_sqrt_meter = env.scene.floor_map[0].nonzero()[0].shape[0] / 100.0
+#         self.num_sqrt_meter_per_ped = self.config.get(
+#             'num_sqrt_meter_per_ped', 8)
+#         self.num_pedestrians = self.config.get('num_pedestrians', 1)
+#         # max(1, int(
+#         #     num_sqrt_meter / self.num_sqrt_meter_per_ped))
+
+#         """
+#         Parameters for our mechanism of preventing pedestrians to back up.
+#         Instead, stop them and then re-sample their goals.
+
+#         num_steps_stop         A list of number of consecutive timesteps
+#                                each pedestrian had to stop for.
+#         num_steps_stop_thresh  The maximum number of consecutive timesteps
+#                                the pedestrian should stop for before sampling
+#                                a new waypoint.
+#         neighbor_stop_radius   Maximum distance to be considered a nearby
+#                                a new waypoint.
+#         backoff_radian_thresh  If the angle (in radian) between the pedestrian's
+#                                orientation and the next direction of the next
+#                                goal is greater than the backoffRadianThresh,
+#                                then the pedestrian is considered backing off.
+#         """
+#         self.num_steps_stop = [0] * self.num_pedestrians
+#         self.neighbor_stop_radius = self.config.get(
+#             'neighbor_stop_radius', 1.0)
+#         # By default, stop 2 seconds if stuck
+#         self.num_steps_stop_thresh = self.config.get(
+#             'num_steps_stop_thresh', 20)
+#         # backoff when angle is greater than 135 degrees
+#         self.backoff_radian_thresh = self.config.get(
+#             'backoff_radian_thresh', np.deg2rad(135.0))
+
+#         """
+#         Parameters for ORCA
+
+#         timeStep        The time step of the simulation.
+#                         Must be positive.
+#         neighborDist    The default maximum distance (center point
+#                         to center point) to other agents a new agent
+#                         takes into account in the navigation. The
+#                         larger this number, the longer the running
+#                         time of the simulation. If the number is too
+#                         low, the simulation will not be safe. Must be
+#                         non-negative.
+#         maxNeighbors    The default maximum number of other agents a
+#                         new agent takes into account in the
+#                         navigation. The larger this number, the
+#                         longer the running time of the simulation.
+#                         If the number is too low, the simulation
+#                         will not be safe.
+#         timeHorizon     The default minimal amount of time for which
+#                         a new agent's velocities that are computed
+#                         by the simulation are safe with respect to
+#                         other agents. The larger this number, the
+#                         sooner an agent will respond to the presence
+#                         of other agents, but the less freedom the
+#                         agent has in choosing its velocities.
+#                         Must be positive.
+#         timeHorizonObst The default minimal amount of time for which
+#                         a new agent's velocities that are computed
+#                         by the simulation are safe with respect to
+#                         obstacles. The larger this number, the
+#                         sooner an agent will respond to the presence
+#                         of obstacles, but the less freedom the agent
+#                         has in choosing its velocities.
+#                         Must be positive.
+#         radius          The default radius of a new agent.
+#                         Must be non-negative.
+#         maxSpeed        The default maximum speed of a new agent.
+#                         Must be non-negative.
+#         """
+#         self.neighbor_dist = self.config.get('orca_neighbor_dist', 5)
+#         self.max_neighbors = self.num_pedestrians
+#         self.time_horizon = self.config.get('orca_time_horizon', 2.0)
+#         self.time_horizon_obst = self.config.get('orca_time_horizon_obst', 2.0)
+#         self.orca_radius = self.config.get('orca_radius', 0.5)
+#         self.orca_max_speed = self.config.get('orca_max_speed', 0.5)
+
+        # self.sim = self.sim
+
+#         # Threshold of pedestrians reaching the next waypoint
+#         self.pedestrian_goal_thresh = \
+#             self.config.get('pedestrian_goal_thresh', 0.3)
+#         self.pedestrians, self.orca_pedestrians = self.load_pedestrians(env)
+#         # Visualize pedestrians' next goals for debugging purposes
+#         # DO NOT use them during training
+#         # self.pedestrian_goals = self.load_pedestrian_goals(env)
+#         self.load_obstacles(env)
+#         self.personal_space_violation_steps = 0
+
+#         self.offline_eval = self.config.get(
+#             'load_scene_episode_config', False)
+#         scene_episode_config_path = self.config.get(
+#             'scene_episode_config_name', None)
+#         # Sanity check when loading our pre-sampled episodes
+#         # Make sure the task simulation configuration does not conflict
+#         # with the configuration used to sample our episode
+#         if self.offline_eval:
+#             path = scene_episode_config_path
+#             self.episode_config = \
+#                 SocialNavEpisodesConfig.load_scene_episode_config(path)
+#             if self.num_pedestrians != self.episode_config.num_pedestrians:
+#                 raise ValueError("The episode samples did not record records for more than {} pedestrians".format(
+#                     self.num_pedestrians))
+#             if env.scene.scene_id != self.episode_config.scene_id:
+#                 raise ValueError("The scene to run the simulation in is '{}' from the " " \
+#                                 scene used to collect the episode samples".format(
+#                     env.scene.scene_id))
+#             if self.orca_radius != self.episode_config.orca_radius:
+#                 print("value of orca_radius: {}".format(
+#                       self.episode_config.orca_radius))
+#                 raise ValueError("The orca radius set for the simulation is {}, which is different from "
+#                                  "the orca radius used to collect the pedestrians' initial position "
+#                                  " for our samples.".format(self.orca_radius))
+    '''
     def load_obstacles(self) -> None:
         self.map_processor = MapProcessor(self.env.map)
         self.obstacles = self.map_processor.get_obstacles()
@@ -156,7 +337,79 @@ class MultiAgentSim:
             agent.id = self.sim.add_agent(agent.default_pos)
             self.agents[agent.id] = agent
             self.ids += [agent.id]
-    
+
+    '''
+        # self.robot_orca_ped = self.sim.addAgent((0, 0))
+        # self.orca_pedestrians = []
+        # for _ in range(self.num_pedestrians):
+        #     orca_ped = self.sim.addAgent((0, 0))
+        #     self.orca_pedestrians.append(orca_ped)
+
+    # def load_pedestrians(self) -> None:#, env):
+    #     """
+    #     Load pedestrians
+
+    #     :param env: environment instance
+    #     :return: a list of pedestrians
+    #     """
+    #     self.robot_orca_ped = self.sim.addAgent((0, 0))
+    #     pedestrians = []
+    #     orca_pedestrians = []
+    #     for _ in range(self.num_pedestrians):
+    #         orca_ped = self.sim.addAgent((0, 0))
+    #         orca_pedestrians.append(orca_ped)
+    #     return pedestrians, orca_pedestrians
+
+    # def load_pedestrian_goals(self, env):
+    #     # Visualize pedestrians' next goals for debugging purposes
+    #     pedestrian_goals = []
+    #     colors = [
+    #         [1, 0, 0, 1],
+    #         [0, 1, 0, 1],
+    #         [0, 0, 1, 1]
+    #     ]
+    #     for i, ped in enumerate(self.pedestrians):
+    #         ped_goal = VisualMarker(
+    #             visual_shape=p.GEOM_CYLINDER,
+    #             rgba_color=colors[i % 3][:3] + [0.5],
+    #             radius=0.3,
+    #             length=0.2,
+    #             initial_offset=[0, 0, 0.2 / 2])
+    #         env.simulator.import_object(ped_goal)
+    #         pedestrian_goals.append(ped_goal)
+    #     return pedestrian_goals
+
+    # def load_obstacles(self):#, env):
+    #     # Add scenes objects to ORCA simulator as obstacles
+    #     # for obj_name in env.scene.objects_by_name:
+    #     #     obj = env.scene.objects_by_name[obj_name]
+    #     #     if obj.category in ['walls', 'floors', 'ceilings']:
+    #     #         continue
+    #     #     x_extent, y_extent = obj.bounding_box[:2]
+    #     #     initial_bbox = np.array([
+    #     #         [x_extent / 2.0, y_extent / 2.0],
+    #     #         [-x_extent / 2.0, y_extent / 2.0],
+    #     #         [-x_extent / 2.0, -y_extent / 2.0],
+    #     #         [x_extent / 2.0, -y_extent / 2.0]
+    #     #     ])
+    #     #     yaw = obj.bbox_orientation_rpy[2]
+    #     #     rot_mat = np.array([
+    #     #         [np.cos(-yaw), -np.sin(-yaw)],
+    #     #         [np.sin(-yaw), np.cos(-yaw)],
+    #     #     ])
+    #     #     initial_bbox = initial_bbox.dot(rot_mat)
+    #     #     initial_bbox = initial_bbox + obj.bbox_pos[:2]
+    #     #     self.sim.addObstacle([
+    #     #         tuple(initial_bbox[0]),
+    #     #         tuple(initial_bbox[1]),
+    #     #         tuple(initial_bbox[2]),
+    #     #         tuple(initial_bbox[3]),
+    #     #     ])
+
+    #     #TODO: Load obstacles from map processor and add it to the simulation
+
+    #     self.sim.processObstacles()
+    '''
 
     def sample_initial_pos(self, agent_id:int) -> Tuple[float]:#env, ped_id):
         """
@@ -208,7 +461,19 @@ class MultiAgentSim:
         """
         self.agent_waypoints = {}
 
+        # for ped_id, (ped, orca_ped) in enumerate(zip(self.pedestrians, self.orca_pedestrians)):
+        #     pass
         for agent_id, agent in self.agents.items():
+
+            # if self.offline_eval:
+            #     episode_index = self.episode_config.episode_index
+            #     initial_pos = np.array(
+            #         self.episode_config.episodes[episode_index]['pedestrians'][ped_id]['initial_pos'])
+            #     initial_orn = np.array(
+            #         self.episode_config.episodes[episode_index]['pedestrians'][ped_id]['initial_orn'])
+            #     waypoints = self.sample_new_target_pos(
+            #         env, initial_pos, ped_id)
+            # else:
 
             #TODO: Get initial position from graph
             initial_pos = self.sample_initial_pos(agent_id)
@@ -262,11 +527,38 @@ class MultiAgentSim:
         """
 
         while True:
+            # if self.offline_eval:
+            #     if ped_id is None:
+            #         raise ValueError(
+            #             "The id of the pedestrian to get the goal position was not specified")
+            #     episode_index = self.episode_config.episode_index
+            #     pos_index = self.episode_config.goal_index[ped_id]
+            #     sampled_goals = self.episode_config.episodes[
+            #         episode_index]['pedestrians'][ped_id]['target_pos']
 
+            #     if pos_index >= len(sampled_goals):
+            #         raise ValueError("The goal positions sampled for pedestrian #{} at "
+            #                          "episode {} are exhausted".format(ped_id, episode_index))
+
+            #     target_pos = np.array(sampled_goals[pos_index])
+            #     self.episode_config.goal_index[ped_id] += 1
+            # else:
 
 
             #TODO: Sample or get target position from graph
             target_pos = self.env.get_random_point()
+
+           
+            #env.scene.get_random_point(
+            # floor=self.floor_num)
+            # print('initial_pos', initial_pos)
+
+            #TODO: Get shortest path from graph
+            # shortest_path, _ = env.scene.get_shortest_path(
+            #     self.floor_num,
+            #     initial_pos[:2],
+            #     target_pos[:2],
+            #     entire_path=True)
 
             shortest_path = self.env.shortest_path(np.array(initial_pos), np.array(target_pos))
                
@@ -310,6 +602,7 @@ class MultiAgentSim:
 
         return waypoints
     
+    #TODO: FINISH THE REST OF THE FUNCTIONS
 
     def step(self, env):
         """
@@ -318,8 +611,20 @@ class MultiAgentSim:
 
         :param env: environment instance
         """
+        # super(SocialNavRandomTask, self).step(env)
+
+        # self.sim.setAgentPosition(
+        #     self.robot_orca_ped,
+        #     tuple(env.robots[0].get_position()[0:2]))
 
         #TODO: Remove self.pedestrians from everything and instead get everything from simulator
+
+
+        # for i, (ped, orca_ped, waypoints) in \
+        #         enumerate(zip(self.pedestrians,
+        #                       self.orca_pedestrians,
+        #                       self.agent_waypoints)):
+        #     pass
             
         for agent_id in self.ids:
             agent = self.agents[agent_id]
@@ -347,9 +652,9 @@ class MultiAgentSim:
             # self.pedestrian_goals[i].set_position(
             #     np.array([next_goal[0], next_goal[1], current_pos[2]]))
 
-            yaw = np.arctan2(next_goal[1] - current_pos[1],
-                             next_goal[0] - current_pos[0])
-            agent.set_yaw(yaw)
+            # yaw = np.arctan2(next_goal[1] - current_pos[1],
+            #                  next_goal[0] - current_pos[0])
+            # agent.set_yaw(yaw)
             
             desired_vel = next_goal - current_pos
             desired_vel = desired_vel / \
@@ -365,6 +670,12 @@ class MultiAgentSim:
 
         # Update the pedestrian position in PyBullet if it does not stop
         # Otherwise, revert back the position in RVO2 simulator
+
+
+        # for i, (agent, orca_pred, waypoints) in \
+        #         enumerate(zip(self.pedestrians,
+        #                       self.orca_pedestrians,
+        #                       self.agent_waypoints)):
             
         for agent_id in self.ids:
             agent = self.agents[agent_id]
@@ -407,6 +718,16 @@ class MultiAgentSim:
         next_peds_pos_xy = \
             {agent_id: self.sim.get_agent_position(agent_id) for agent_id in self.ids}
         next_peds_stop_flag = {agent_id: False for agent_id in self.ids}
+
+        # next_peds_pos_xyz = \
+        #     {i: ped.get_position() for i, ped in enumerate(self.pedestrians)}
+        # next_peds_stop_flag = [False for i in range(len(self.pedestrians))]
+
+        # for i, (ped, orca_ped, waypoints) in \
+        #         enumerate(zip(self.pedestrians,
+        #                       self.orca_pedestrians,
+        #                       self.agent_waypoints)):
+        #     pass
     
         for agent_id in self.ids:
 
@@ -519,3 +840,5 @@ class MultiAgentSim:
         #     info['stl'] = 0.0
 
         # return done, info
+
+
