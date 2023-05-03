@@ -7,6 +7,7 @@ import numpy as np
 from matplotlib import patches
 from matplotlib import animation
 from numpy.linalg import norm
+import cv2
 
 class VisualizerConfig(NamedTuple):
  
@@ -35,6 +36,8 @@ class VisualizerConfig(NamedTuple):
     legend_pedestrians: str = 'Pedestrians'
     fig_size: List[int] = [7,7]
     time_font_size: int = 8
+    pix_per_meter: int = 100
+    display_waypoints: bool = True
 
 
 class Visualizer:
@@ -45,9 +48,11 @@ class Visualizer:
         self.config = config
         self.ped_trajectories = None
         self.robot_trajectory = None
+        self.map_img = None
         self.num_peds = 0
         self.episode_length = 0
         self.cmap = plt.cm.get_cmap(self.config.cmap, self.config.cmap_num)
+        self.waypoints= []
 
         plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
 
@@ -65,6 +70,34 @@ class Visualizer:
         self.ped_trajectories = ped_trajectories
         self.num_peds = len(ped_trajectories)
         self.episode_length = len(robot_trajectory)
+
+    def add_map_background(self, map_img: np.ndarray):
+        """Add the map background to the visualization.
+
+        Parameters
+        ----------
+        map_img: 
+            The map image.
+        """
+        self.map_img = map_img
+
+    def add_waypoints(self, waypoints: List[List[float]]):
+        """Add the waypoints to the visualization.
+
+        Parameters
+        ----------
+        waypoints: 
+            The waypoints.
+        """
+
+
+        # self.config.display_waypoints = True
+        self.waypoints.extend(waypoints)
+        #Add the waypoints as points to the plot
+        # for waypoint in waypoints:
+        #     plt.plot(waypoint[0], waypoint[1], 'o', color='red')
+
+
 
     def render(self, mode: str='traj', output_file: str=None):
         """Render the visualization.
@@ -90,8 +123,31 @@ class Visualizer:
             The path to save the video. Defaults to None.
         """
 
-        _, ax = plt.subplots(figsize=self.config.fig_size)
+        fig, ax = plt.subplots(figsize=self.config.fig_size)
         ax.tick_params(labelsize=self.config.x_label_size)
+        #Add map image to the background
+        if self.map_img is not None:
+            #Convert the image to RGB format as it is currently [0,1]
+            #Turn the image upside down as the origin is at the top left corner
+            map_img = np.flipud(self.map_img)
+            #Get size of the image in meters
+            # print(map_img.shape[0])
+            map_size_x = map_img.shape[1] / self.config.pix_per_meter
+            map_size_y = map_img.shape[0] / self.config.pix_per_meter
+            #Account for the origin being at the center of the image
+            map_offset_x = map_size_x / 2
+            map_offset_y = map_size_y / 2
+            #Set the extent of the image
+            extent = [-map_offset_x, map_offset_x, -map_offset_y, map_offset_y]
+            map_img = map_img.astype(np.uint8)
+            map_img = cv2.cvtColor(map_img*255, cv2.COLOR_GRAY2RGB)
+
+            ax.imshow(map_img, extent=extent)
+            self.config.x_lim[0], self.config.x_lim[1] = \
+                  -map_offset_x, map_offset_x
+            self.config.y_lim[0], self.config.y_lim[1] = \
+                    -map_offset_y, map_offset_y
+
         ax.set_xlim(self.config.x_lim)
         ax.set_ylim(self.config.y_lim)
         ax.set_xlabel(self.config.x_label, fontsize=self.config.x_label_size)
@@ -102,10 +158,10 @@ class Visualizer:
 
         for k in range(self.episode_length):
             if k % 4 == 0 or k == self.episode_length - 1:
-                robot = plt.Circle(robot_positions[k], 0.2, fill=True, color=self.config.robot_color)
+                robot = plt.Circle(robot_positions[k], 0.125, fill=False, color=self.config.robot_color)
                 # Check if there are pedestrians in the scene
                 if self.num_peds > 0:
-                    pedestrians = [plt.Circle(ped_positions[i][k], 0.2, fill=False, color=self.cmap(i)) for i in range(self.num_peds)]
+                    pedestrians = [plt.Circle(ped_positions[i][k], 0.125, fill=False, color=self.cmap(i)) for i in range(self.num_peds)]
                 else:
                     pedestrians = []
 
@@ -154,6 +210,12 @@ class Visualizer:
         # goal_legend = mlines.Line2D([], [], color=self.config.goal_color, marker='o', linestyle='None',
         #                             markersize=10, label=self.config.legend_goal)
         
+        if self.config.display_waypoints:
+            waypoints = self.waypoints
+            for waypoint in waypoints:
+                plt.plot(waypoint[0], waypoint[1], 'o', color='red')
+        
+        
         plt.show()
 
     def _render_video(self, output_file: str=None):
@@ -176,17 +238,42 @@ class Visualizer:
 
         fig, ax = plt.subplots(figsize=(7,7))
         ax.tick_params(labelsize=self.config.x_label_size)
+
+        #Add map image to the background
+        if self.map_img is not None:
+            #Convert the image to RGB format as it is currently [0,1]
+            #Turn the image upside down as the origin is at the top left corner
+            map_img = np.flipud(self.map_img)
+            #Get size of the image in meters
+            print(map_img.shape[0])
+            map_size_x = map_img.shape[1] / self.config.pix_per_meter
+            map_size_y = map_img.shape[0] / self.config.pix_per_meter
+            #Account for the origin being at the center of the image
+            map_offset_x = map_size_x / 2
+            map_offset_y = map_size_y / 2
+            #Set the extent of the image
+            extent = [-map_offset_x, map_offset_x, -map_offset_y, map_offset_y]
+            map_img = map_img.astype(np.uint8)
+            map_img = cv2.cvtColor(map_img*255, cv2.COLOR_GRAY2RGB)
+
+            ax.imshow(map_img, extent=extent)
+            self.config.x_lim[0], self.config.x_lim[1] = \
+                  -map_offset_x, map_offset_x
+            self.config.y_lim[0], self.config.y_lim[1] = \
+                    -map_offset_y, map_offset_y
+
         ax.set_xlim(self.config.x_lim)
         ax.set_ylim(self.config.y_lim)
         ax.set_xlabel(self.config.x_label, fontsize=self.config.x_label_size)
         ax.set_ylabel(self.config.y_label, fontsize=self.config.y_label_size)
 
-        robot = plt.Circle(self.robot_trajectory[0], 0.2, fill=True, color=robot_color)
+
+        robot = plt.Circle(self.robot_trajectory[0], 0.125, fill=True, color=robot_color)
         ax.add_artist(robot)
 
         # Check if there are pedestrians in the scene
         if self.num_peds > 0:
-            pedestrians = [plt.Circle(self.ped_trajectories[i][0], 0.2, fill=False, color=cmap(i))
+            pedestrians = [plt.Circle(self.ped_trajectories[i][0], 0.125, fill=False, color=cmap(i))
                         for i in range(self.num_peds)]
             for ped in pedestrians:
                 ax.add_artist(ped)
@@ -209,7 +296,8 @@ class Visualizer:
         for time in times:
             ax.add_artist(time)
 
-        radius = 0.2
+        radius = 0.15
+        
         orientations = []
         for i in range(1 + self.num_peds):
             orientation = []
@@ -287,11 +375,11 @@ class Visualizer:
 
         
         if output_file is not None and output_file[-4] == '.gif':
-            pillow_writer = animation.PillowWriter(fps=8)
+            pillow_writer = animation.PillowWriter(fps=32)
             anim.save(output_file, writer=pillow_writer)
         elif output_file is not None:
             ffmpeg_writer = animation.writers['ffmpeg']
-            writer = ffmpeg_writer(fps=8, metadata=dict(artist='Me'), bitrate=1800)
+            writer = ffmpeg_writer(fps=32, metadata=dict(artist='Me'), bitrate=1800)
             anim.save(output_file, writer=writer)
         else:
             plt.show()

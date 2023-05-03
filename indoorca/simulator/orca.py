@@ -5,7 +5,6 @@ import numpy as np
 import rvo2
 
 from indoorca.environment.core import Environment
-from indoorca.processing.core import MapProcessor
 
 class IndoorORCASimConfig(NamedTuple):
     """ A wrapper for RVO2 simulator with additional functions for processing a binary traversability map and navigation. 
@@ -38,14 +37,14 @@ class IndoorORCASimConfig(NamedTuple):
         The default initial two-dimensional linear velocity of a agent (optional)
     """
     
-    time_step: float = 1/60.
-    neighbor_dist: float = 1.5
-    max_neighbors: int = 5
-    time_horizon: float = 1.5
-    time_horizon_obst: float = 2
-    radius: float = 0.4
-    max_speed: float = 2
-    velocity: Tuple[float] = (0.,0.)
+    time_step: float = 1/32.
+    neighbor_dist: float = 5.
+    max_neighbors: int = 4
+    time_horizon: float = 1.25
+    time_horizon_obst: float = 2.
+    radius: float = 0.125
+    max_speed: float = 0.5
+    # velocity: Tuple[float] = (0.,0.)
 
 
 class IndoorORCASim:
@@ -64,7 +63,7 @@ class IndoorORCASim:
     def __init__(self, config: IndoorORCASimConfig):
         self.config = config
         self.sim = rvo2.PyRVOSimulator(config.time_step, config.neighbor_dist, config.max_neighbors, config.time_horizon,
-                                       config.time_horizon_obst, config.radius, config.max_speed, config.velocity)
+                                       config.time_horizon_obst, config.radius, config.max_speed)
 
         self.environment = None
         self.obstacles = None
@@ -146,15 +145,15 @@ class IndoorORCASim:
         """
         return self.config.max_speed
     
-    def get_velocity(self) -> Tuple[float]:
-        """ Returns the default initial two-dimensional linear velocity of a agent.
+    # def get_velocity(self) -> Tuple[float]:
+    #     """ Returns the default initial two-dimensional linear velocity of a agent.
         
-        Returns
-        -------
-        Tuple[float] :
-            The default initial two-dimensional linear velocity of a agent
-        """
-        return self.config.velocity
+    #     Returns
+    #     -------
+    #     Tuple[float] :
+    #         The default initial two-dimensional linear velocity of a agent
+    #     """
+    #     return self.config.velocity
     
     def get_obstacles(self) -> List[List[float]]:
         """ Returns the obstacles of the simulation.
@@ -175,11 +174,21 @@ class IndoorORCASim:
             The environment to be simulated
         """
         self.environment = environment
-        self.sim.clearAgents()
+        # self.sim.clearAgents()
         # self.sim.clearObstacles()
-        # self.obstacles = MapProcessor.process_map(self.environment.map)
         self._no_steps = True
         self.trajectories = []
+
+    def soft_reset(self) -> None:
+        """ Resets the simulation without clearing the obstacles.
+
+        """
+        for i in range(self.get_num_agents()):
+            self.sim.setAgentPosition(i, self.get_agent_position(i))
+
+        self._no_steps = True
+        self.trajectories = []
+
 
 
     def add_agent(self, position: List[float], velocity: List[float] = []) -> int:
@@ -197,7 +206,7 @@ class IndoorORCASim:
         int : 
             The number of the agent
         """
-        return self.sim.addAgent(position)
+        return self.sim.addAgent(tuple(position))
     
     def add_obstacle(self, vertices: List[List[float]]) -> int:
         """ Adds an obstacle to the simulation.
@@ -214,6 +223,21 @@ class IndoorORCASim:
         """
         return self.sim.addObstacle(vertices)
     
+    def add_obstacles(self, obstacles: List[List[List[float]]]) -> List[int]:
+        """ Adds a list of obstacles to the simulation.
+        
+        Parameters
+        ----------
+        obstacles : List[List[List[float]]]
+            A list of obstacles, where each obstacle is a list of vertices of the polygonal obstacle in counterclockwise order
+
+        Returns
+        -------
+        List[int] :
+            The numbers of the obstacles
+        """
+        return [self.add_obstacle(obstacle) for obstacle in obstacles]
+    
     def process_obstacles(self) -> None:
         """ Processes the obstacles that have been added so that they are accounted for in the simulation.
         """
@@ -229,7 +253,7 @@ class IndoorORCASim:
         pref_velocity :
             The two-dimensional preferred velocity of the agent
         """
-        self.sim.setAgentPrefVelocity(agent_no, pref_velocity)
+        self.sim.setAgentPrefVelocity(agent_no, tuple(pref_velocity))
 
     def set_agent_position(self, agent_no: int, position: List[float]) -> None:
         """ Sets the position of a agent.
@@ -241,7 +265,7 @@ class IndoorORCASim:
         position :
             The two-dimensional position of the agent
         """
-        self.sim.setAgentPosition(agent_no, position)
+        self.sim.setAgentPosition(agent_no, tuple(position))
 
     def get_num_agents(self) -> int:
         """ Returns the number of agents in the simulation.
