@@ -59,8 +59,9 @@ class Environment:
         self._obstacles_polygons = []
         self.obstacle_map = None
         self.pix_per_meter = indoorca.pix_per_meter
-        self.waypoint_dist = 0.05
-        self.num_waypoints = 8
+        self.waypoint_dist = 0.1
+        self.num_waypoints = 4
+        
 
     def get_obstacle_meters(self)->List[List[List[float]]]:
         """Return the obstacle coordinates in meters
@@ -152,7 +153,7 @@ class Environment:
     def _compute_trav_map(self)->None:
         """Compute the traversability map for the environment
         """
-        radius = int(indoorca.pix_per_meter * 0.5)
+        radius = int(indoorca.pix_per_meter * 0.55)
         kernel = np.ones((radius, radius)).astype(np.uint8)
         eroded_map = cv2.erode(self.obstacle_map.astype('uint8'), kernel)
         self.graph, self.trav_map = self.build_graph(eroded_map)
@@ -222,7 +223,7 @@ class Environment:
         point = self._map_to_world(np.array(point))
         # print('random point in meters:', point)
 
-        return [point[1], point[0]]
+        return [point[0], point[1]]
           
         # while True:
 

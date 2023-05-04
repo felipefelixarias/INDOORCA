@@ -18,6 +18,12 @@ class Agent():
         self.start_position = self.default_pos
         self.goal_position = self.default_pos
 
+    def set_start_position(self, pos):
+        self.start_position = pos
+
+    def set_goal_position(self, pos):
+        self.goal_position = pos
+
     def set_position(self, pos):
         self.pos = pos
 
@@ -44,9 +50,12 @@ class MultiAgentSim:
         self.num_steps_stop_thresh = 20
         # backoff when angle is greater than 135 degrees
         self.backoff_radian_thresh = np.deg2rad(135.0)
-        self.pedestrian_goal_thresh = 0.3
+        self.pedestrian_goal_thresh = 0.25
         self.personal_space_violation_steps = 0
         self.arrived_at_goal = {}
+        self.starts = {}
+        self.goals = {}
+
 
         if num_agents < 1:
             raise ValueError('Number of agents must be greater than or equal to 1.')
@@ -90,6 +99,9 @@ class MultiAgentSim:
         self.obstacles = []
         # self.num_agents = num_agents
         self.personal_space_violation_steps = 0
+        self.arrived_at_goal = {}
+        self.starts = {}
+        self.goals = {}
 
 
         self.sim.add_obstacles(self.env.get_obstacle_meters())
@@ -111,6 +123,9 @@ class MultiAgentSim:
             self.agents[agent.id] = agent
             self.ids += [agent.id]
             self.arrived_at_goal[agent.id] = False
+            self.starts[agent.id] = agent.default_pos
+            self.goals[agent.id] = agent.default_pos
+
 
 
     def sample_initial_pos(self, agent_id:int) -> Tuple[float]:#env, ped_id):
@@ -197,6 +212,74 @@ class MultiAgentSim:
         #print('len(waypoints): ', len(waypoints))
         # print('shortest_path: \n', shortest_path)
         return shortest_path.tolist()
+    
+    def get_starts_and_goals(self):
+        starts = self.starts
+
+        for agent_id, agent in self.agents.items():
+            rand_pos = self.env.get_random_point()
+            #Make sure the random position is not close to an existing start position
+            not_free_pos = True
+            while not_free_pos:
+                not_free_pos = False
+                for start_pos in starts.values():
+                    dist = np.linalg.norm(np.array(rand_pos) - np.array(start_pos))
+                    if dist < self.pedestrian_goal_thresh:
+                        rand_pos = self.env.get_random_point()
+                        not_free_pos = True
+                        break
+            starts[agent_id] = rand_pos
+            agent.set_start_position(rand_pos)
+
+
+        #Tr    
+        goals = self.goals
+        dist_thresh = 4.  # Set the desired minimum distance threshold between start and goal
+        num_samples = 100  # Set the number of samples to be taken
+
+        for agent_id, agent in self.agents.items():
+            start_pos = starts[agent_id]
+
+            # Find a goal position that is not too close to other occupied positions and
+            # at least dist_thresh away from the start position
+            valid_goal = False
+            while not valid_goal:
+                rand_pos = self.env.get_random_point()
+
+                # Check if the random position is not too close to existing occupied positions
+                not_free_pos = False
+                occupied_positions = list(starts.values()) + list(goals.values())
+                for occ_pos in occupied_positions:
+                    dist = np.linalg.norm(np.array(rand_pos) - np.array(occ_pos))
+                    if dist < self.pedestrian_goal_thresh:
+                        not_free_pos = True
+                        break
+
+                # If the random position is not too close to occupied positions, check if it's
+                # at least dist_thresh away from the start position using shortest_path
+                if not not_free_pos:
+                    max_dist = 0
+                    furthest_sample = None
+                    for _ in range(num_samples):
+                        sampled_pos = self.env.get_random_point()
+                        _, path_dist = self.env.shortest_path(np.array(start_pos), np.array(sampled_pos))
+
+                        if path_dist > dist_thresh:
+                            goals[agent_id] = sampled_pos
+                            agent.set_goal_position(sampled_pos)
+                            valid_goal = True
+                            break
+
+                        if path_dist > max_dist:
+                            max_dist = path_dist
+                            furthest_sample = sampled_pos
+
+                    if not valid_goal:
+                        goals[agent_id] = furthest_sample
+                        agent.set_goal_position(furthest_sample)
+                        valid_goal = True
+
+        return starts, goals
 
     def sample_new_target_pos(self, initial_pos):
         """
@@ -251,38 +334,6 @@ class MultiAgentSim:
         return waypoints
 
     def shortest_path_to_waypoints(self, shortest_path):
-        # Convert dense waypoints of the shortest path to coarse waypoints
-        # in which the collinear waypoints are merged.
-        # assert len(shortest_path) > 0
-        # waypoints = []
-        # valid_waypoint = None
-        # prev_waypoint = None
-        # cached_slope = None
-        # for waypoint in shortest_path:
-        #     if valid_waypoint is None:
-        #         valid_waypoint = waypoint
-        #     elif cached_slope is None:
-        #         cached_slope = waypoint - valid_waypoint
-        #     else:
-        #         cur_slope = waypoint - prev_waypoint
-        #         cosine_angle = np.dot(cached_slope, cur_slope) / \
-        #             (np.linalg.norm(cached_slope) * np.linalg.norm(cur_slope))
-        #         if np.abs(cosine_angle - 1.0) > 1e-3:
-        #             waypoints.append(valid_waypoint)
-        #             valid_waypoint = prev_waypoint
-        #             cached_slope = waypoint - valid_waypoint
-
-        #     prev_waypoint = waypoint
-
-        # # Add the last two valid waypoints
-        # waypoints.append(valid_waypoint)
-        # waypoints.append(shortest_path[-1])
-
-        # # Remove the first waypoint because it's the same as the initial pos
-        # waypoints.pop(0)
-
-        # return waypoints
-    
         # Convert dense waypoints of the shortest path to coarse waypoints
         # in which the collinear waypoints are merged.
         assert len(shortest_path) > 0

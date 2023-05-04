@@ -41,7 +41,7 @@ class IndoorORCASimConfig(NamedTuple):
     neighbor_dist: float = 5.
     max_neighbors: int = 4
     time_horizon: float = 1.25
-    time_horizon_obst: float = 2.
+    time_horizon_obst: float = 1.25
     radius: float = 0.125
     max_speed: float = 0.5
     # velocity: Tuple[float] = (0.,0.)
