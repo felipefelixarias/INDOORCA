@@ -59,8 +59,9 @@ class Environment:
         self._obstacles_polygons = []
         self.obstacle_map = None
         self.pix_per_meter = indoorca.pix_per_meter
-        self.waypoint_dist = 0.1
-        self.num_waypoints = 4
+        self.waypoint_dist = indoorca.radius_meters#0.1
+        self.num_waypoints = 3 #Changing the number of waypoints will require changing goal threshold in simulator
+        #radius is 0.125 meters so 4 waypoints is 0.5 meters
         
 
     def get_obstacle_meters(self)->List[List[List[float]]]:
@@ -73,39 +74,7 @@ class Environment:
         """
         return self.obstacles_meters
     
-    def shortest_path_to_waypoints(self, shortest_path):
-        # Convert dense waypoints of the shortest path to coarse waypoints
-        # in which the collinear waypoints are merged.
-        # assert len(shortest_path) > 0
-        # waypoints = []
-        # valid_waypoint = None
-        # prev_waypoint = None
-        # cached_slope = None
-        # for waypoint in shortest_path:
-        #     if valid_waypoint is None:
-        #         valid_waypoint = waypoint
-        #     elif cached_slope is None:
-        #         cached_slope = waypoint - valid_waypoint
-        #     else:
-        #         cur_slope = waypoint - prev_waypoint
-        #         cosine_angle = np.dot(cached_slope, cur_slope) / \
-        #             (np.linalg.norm(cached_slope) * np.linalg.norm(cur_slope))
-        #         if np.abs(cosine_angle - 1.0) > 1e-3:
-        #             waypoints.append(valid_waypoint)
-        #             valid_waypoint = prev_waypoint
-        #             cached_slope = waypoint - valid_waypoint
-
-        #     prev_waypoint = waypoint
-
-        # # Add the last two valid waypoints
-        # waypoints.append(valid_waypoint)
-        # waypoints.append(shortest_path[-1])
-
-        # # Remove the first waypoint because it's the same as the initial pos
-        # waypoints.pop(0)
-
-        # return waypoints
-    
+    def shortest_path_to_waypoints(self, shortest_path):   
         # Convert dense waypoints of the shortest path to coarse waypoints
         # in which the collinear waypoints are merged.
         assert len(shortest_path) > 0
@@ -153,8 +122,9 @@ class Environment:
     def _compute_trav_map(self)->None:
         """Compute the traversability map for the environment
         """
-        radius = int(indoorca.pix_per_meter * 0.55)
-        kernel = np.ones((radius, radius)).astype(np.uint8)
+        #Add padding so that the agent doesnt go on edge of obstacles
+        pad = int(indoorca.radius_pixels * 3.75)  
+        kernel = np.ones((pad, pad)).astype(np.uint8)
         eroded_map = cv2.erode(self.obstacle_map.astype('uint8'), kernel)
         self.graph, self.trav_map = self.build_graph(eroded_map)
 
@@ -212,31 +182,16 @@ class Environment:
         if np.all(self.trav_map == indoorca.obstacle_space):
             raise ValueError("Environment is all obstacle space")
         
-        # print('environment shape:', self.trav_map.shape)
-
         #Get random point from the traversability graph
         all_locations = list(self.graph.nodes)
-
         point = list(all_locations[np.random.randint(0, len(all_locations))])
-        print('random point:', point)
+
         #Convert to meters
         point = self._map_to_world(np.array(point))
-        # print('random point in meters:', point)
+
 
         return [point[0], point[1]]
-          
-        # while True:
-
-
-
-        #     point = [np.random.randint(0, self.trav_map.shape[0]), np.random.randint(0, self.trav_map.shape[1])]
-        
-        #     if self.trav_map[point[0], point[1]] == indoorca.free_space:
-        #         #Convert to meters
-        #         point = self._map_to_world(np.array(point))
-        #         return point.tolist()
-            
-        
+                  
 
     def _simplify_polygon(self, polygon: Polygon, tolerance: float=0.02) -> List[Polygon]:
         """ Return the simplified polygon.
@@ -253,7 +208,7 @@ class Environment:
         Polygon :
             Simplified polygon
         """
-        simplified = polygon.simplify(0.02, preserve_topology=True)
+        simplified = polygon.simplify(0.015, preserve_topology=True)
         if isinstance(simplified, Polygon):
             return [simplified]
         return list(simplified)
@@ -277,6 +232,12 @@ class Environment:
         List[Polygon]
             List of Polygon objects extracted from the map
         """        
+        # Set margin of image to be free space
+        binary_map[0, :] = indoorca.free_space
+        binary_map[-1, :] = indoorca.free_space
+        binary_map[:, 0] = indoorca.free_space
+        binary_map[:, -1] = indoorca.free_space
+
 
         contours = measure.find_contours(binary_map, 0.5)
 
@@ -401,7 +362,7 @@ class Environment:
                 World coordinates
         """        
 
-        axis = 0 if len(xy.shape) == 1 else 1
+
         xy = np.asarray(xy)
         ret = (xy - np.array(self.map.shape)/2.0)/indoorca.pix_per_meter
         ret = np.asarray(ret)
@@ -522,174 +483,6 @@ class Environment:
 
         raise ValueError("Unable to find a goal at the average shortest path length.")
 
-    # def find_goal_at_avg_shortest_path_length(self, source_world: np.ndarray, num_samples: int = 100) -> np.ndarray:
-    #     """Find a goal position that is approximately the average shortest path length away from the source
-
-    #     Args:
-    #         source_world
-    #             Source point in world coordinates
-    #         num_samples
-    #             Number of nodes to sample for calculating the shortest path lengths
-
-    #     Returns:
-    #         np.ndarray
-    #             Goal position in world coordinates
-    #     """
-
-    #     source = self._world_to_map(np.array(source_world))
-    #     avg_shortest_path_length = nx.average_shortest_path_length(self.graph, weight='weight')
-
-    #     # Sample nodes from the graph
-    #     nodes = list(self.graph.nodes)
-    #     sampled_nodes = random.sample(nodes, min(num_samples, len(nodes)))
-
-    #     # Calculate the shortest path length from the source to the sampled nodes
-    #     path_lengths = {node: nx.dijkstra_path_length(self.graph, source, node, weight='weight') for node in sampled_nodes}
-
-    #     # Sort the path lengths and nodes
-    #     sorted_path_lengths = sorted((length, node) for node, length in path_lengths.items())
-
-    #     # Find the index of the path length closest to the average using binary search
-    #     closest_goal_index = bisect.bisect_left(sorted_path_lengths, (avg_shortest_path_length,))
-    #     closest_goal_index = min(closest_goal_index, len(sorted_path_lengths) - 1)  # Handle edge case
-
-    #     # Check if the index to the left is closer to the average shortest path length
-    #     if closest_goal_index > 0:
-    #         diff_current = abs(sorted_path_lengths[closest_goal_index][0] - avg_shortest_path_length)
-    #         diff_prev = abs(sorted_path_lengths[closest_goal_index - 1][0] - avg_shortest_path_length)
-    #         if diff_prev < diff_current:
-    #             closest_goal_index -= 1
-
-    #     closest_goal = sorted_path_lengths[closest_goal_index][1]
-    #     goal_world = self._map_to_world(closest_goal)
-
-    #     return goal_world
-
-
-# def find_goal_at_avg_shortest_path_length(self, source_world: np.ndarray) -> np.ndarray:
-#     """Find a goal position that is approximately the average shortest path length away from the source
-
-#     Args:
-#         source_world
-#             Source point in world coordinates
-
-#     Returns:
-#         np.ndarray
-#             Goal position in world coordinates
-#     """
-
-#     source = self._world_to_map(np.array(source_world))
-#     avg_shortest_path_length = nx.average_shortest_path_length(self.graph, weight='weight')
-
-#     # Calculate the shortest path length from the source to all nodes
-#     path_lengths = nx.single_source_dijkstra_path_length(self.graph, source, weight='weight')
-
-#     # Create a SortedList of the path lengths and nodes
-#     sorted_path_lengths = SortedList((length, node) for node, length in path_lengths.items())
-
-#     # Find the index of the path length closest to the average using bisect_left
-#     closest_goal_index = sorted_path_lengths.bisect_left((avg_shortest_path_length,))
-#     closest_goal_index = min(closest_goal_index, len(sorted_path_lengths) - 1)  # Handle edge case
-
-#     # Check if the index to the left is closer to the average shortest path length
-#     if closest_goal_index > 0:
-#         diff_current = abs(sorted_path_lengths[closest_goal_index][0] - avg_shortest_path_length)
-#         diff_prev = abs(sorted_path_lengths[closest_goal_index - 1][0] - avg_shortest_path_length)
-#         if diff_prev < diff_current:
-#             closest_goal_index -= 1
-
-#     # Fallback mechanism: if no suitable goal is found, return the farthest node from the start position
-#     if sorted_path_lengths[closest_goal_index][0] < avg_shortest_path_length:
-#         closest_goal_index = len(sorted_path_lengths) - 1
-
-#     closest_goal = sorted_path_lengths[closest_goal_index][1]
-#     goal_world = self._map_to_world(closest_goal)
-
-#     return goal_world
-    
-    # def find_goal_at_avg_shortest_path_length(self, source_world: np.ndarray) -> np.ndarray:
-    #     """Find a goal position that is approximately the average shortest path length away from the source
-
-    #     Args:
-    #         source_world
-    #             Source point in world coordinates
-
-    #     Returns:
-    #         np.ndarray
-    #             Goal position in world coordinates
-    #     """
-
-    #     print('source_world: ', source_world)
-    #     source = self._world_to_map(np.array(source_world))
-    #     print('source: ', source)
-    #     avg_shortest_path_length = nx.average_shortest_path_length(self.graph, weight='weight')
-
-    #     # Calculate the shortest path length from the source to all nodes
-    #     path_lengths = nx.single_source_dijkstra_path_length(self.graph, source, weight='weight')
-
-    #     # Find the node closest to the average shortest path length
-    #     closest_goal = None
-    #     min_diff = float('inf')
-    #     for node, length in path_lengths.items():
-    #         diff = abs(length - avg_shortest_path_length)
-    #         if diff < min_diff:
-    #             min_diff = diff
-    #             closest_goal = node
-
-    #     print('closest_goal: ', closest_goal)
-    #     goal_world = self._map_to_world(closest_goal)
-
-
-    #     return goal_world
-        
-    # def find_goal_at_avg_shortest_path_length(self, source_world: np.ndarray, num_attempts: int = 1000) -> np.ndarray:
-    #     """Find a goal position that is approximately the average shortest path length away from the source
-
-    #     Args:
-    #         source_world
-    #             Source point in world coordinates
-    #         num_attempts
-    #             Number of attempts to find a goal at the approximate distance
-
-    #     Returns:
-    #         np.ndarray
-    #             Goal position in world coordinates
-    #     """
-
-    #     avg_shortest_path_length = nx.average_shortest_path_length(self.graph, weight='weight')
-
-    #     # Try to find a goal position within a range around the average shortest path length
-    #     for _ in range(num_attempts):
-    #         random_goal = self.random_position()
-    #         random_goal_world = self._map_to_world(random_goal)
-    #         path_map = np.asarray(nx.astar_path(self.graph, source_world, random_goal_world, heuristic=l2_distance))
-    #         path_length = np.sum(np.linalg.norm(path_map[1:] - path_map[:-1], axis=1))
-
-    #         if abs(path_length - avg_shortest_path_length) < 0.1 * avg_shortest_path_length:  # Tolerance of 10%
-    #             return random_goal_world
-
-    #     raise ValueError("Could not find a goal position within the specified number of attempts")
-
-    # def random_start_and_goal_path(self, entire_path: bool = False) -> Tuple[List[np.ndarray], float]:
-    #     """Find a path with a random start and goal position at the average shortest path length
-
-    #     Args:
-    #         entire_path
-    #             If True, return the entire path. If False, return only waypoints
-
-    #     Returns:
-    #         List[np.ndarray]
-    #             List of waypoints in world coordinates
-    #         float
-    #             Length of the path
-    #     """
-
-    #     random_start = np.random.randint(0, self.map_size, size=2)
-    #     random_start_world = np.array(self._map_to_world(random_start))
-    #     goal_at_avg_path_length = self.find_goal_at_avg_shortest_path_length(random_start_world)
-    #     path_world, geodesic_dist = self.shortest_path(random_start_world, goal_at_avg_path_length, entire_path=entire_path)
-
-    #     return path_world, geodesic_dist
 
     def shortest_path(self, 
                       source_world: np.ndarray, 
@@ -712,23 +505,10 @@ class Environment:
             float
                 Length of the path  
         """
-        # print('source_world: ', source_world)
-        # print('target_world: ', target_world)
-        # print('self.map.shape: ', self.map.shape)
-        # p1 = Position(self.map.shape)
-        # p1.set_position(source_world[0], source_world[1])
-        # print('p1: ', p1.get_position_pix())
 
-        # p2 = Position(self.map.shape)
-        # p2.set_position(target_world[0], target_world[1])
-        # print('p2: ', p2.get_position_pix())
 
         source = tuple(self._world_to_map(source_world))
         target = tuple(self._world_to_map(target_world))
-        # source = (int(source[1]), int(source[0]))
-        # target = (int(target[1]), int(target[0]))
-        # print('source_map: ', source)
-        # print('target_map: ', target)
 
         if not self.graph.has_node(source):
             # print('source not in graph')
@@ -739,7 +519,6 @@ class Environment:
                         weight=l2_distance(source, closest_node))
 
         if not self.graph.has_node(target):
-            print('target not in graph')
             nodes = np.array(self.graph.nodes)
             closest_node = tuple(
                 nodes[np.argmin(np.linalg.norm(nodes - target, axis=1))])

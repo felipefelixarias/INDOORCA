@@ -8,6 +8,7 @@ from matplotlib import patches
 from matplotlib import animation
 from numpy.linalg import norm
 import cv2
+import indoorca
 
 class VisualizerConfig(NamedTuple):
  
@@ -158,10 +159,10 @@ class Visualizer:
 
         for k in range(self.episode_length):
             if k % 4 == 0 or k == self.episode_length - 1:
-                robot = plt.Circle(robot_positions[k], 0.125, fill=False, color=self.config.robot_color)
+                robot = plt.Circle(robot_positions[k], indoorca.radius_meters, fill=False, color=self.config.robot_color)
                 # Check if there are pedestrians in the scene
                 if self.num_peds > 0:
-                    pedestrians = [plt.Circle(ped_positions[i][k], 0.125, fill=False, color=self.cmap(i)) for i in range(self.num_peds)]
+                    pedestrians = [plt.Circle(ped_positions[i][k], indoorca.radius_meters, fill=False, color=self.cmap(i)) for i in range(self.num_peds)]
                 else:
                     pedestrians = []
 
@@ -268,12 +269,13 @@ class Visualizer:
         ax.set_ylabel(self.config.y_label, fontsize=self.config.y_label_size)
 
 
-        robot = plt.Circle(self.robot_trajectory[0], 0.125, fill=True, color=robot_color)
+        agent_radius = indoorca.radius_meters
+        robot = plt.Circle(self.robot_trajectory[0], agent_radius, fill=True, color=robot_color)
         ax.add_artist(robot)
 
         # Check if there are pedestrians in the scene
         if self.num_peds > 0:
-            pedestrians = [plt.Circle(self.ped_trajectories[i][0], 0.125, fill=False, color=cmap(i))
+            pedestrians = [plt.Circle(self.ped_trajectories[i][0], agent_radius, fill=False, color=cmap(i))
                         for i in range(self.num_peds)]
             for ped in pedestrians:
                 ax.add_artist(ped)
@@ -285,18 +287,20 @@ class Visualizer:
         agents = pedestrians + [robot]
         #check if there are pedestrians in the scene
         if self.num_peds > 0:
-            times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
-                            '{:.1f}'.format(global_time),
-                            color='black', fontsize=self.config.time_font_size) for i in range(self.num_peds + 1)]
+            # times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
+            #                 '{:.1f}'.format(global_time),
+            #                 color='black', fontsize=self.config.time_font_size) for i in range(self.num_peds + 1)]
+            times = []
         else:
-            times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
-                            '{:.1f}'.format(global_time),
-                            color='black', fontsize=self.config.time_font_size) for i in range(1)]
+            # times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
+            #                 '{:.1f}'.format(global_time),
+            #                 color='black', fontsize=self.config.time_font_size) for i in range(1)]
+            times = []
 
-        for time in times:
-            ax.add_artist(time)
+        # for time in times:
+        #     ax.add_artist(time)
 
-        radius = 0.15
+        radius = indoorca.radius_meters
         
         orientations = []
         for i in range(1 + self.num_peds):
@@ -345,10 +349,10 @@ class Visualizer:
                 for i in range(self.num_peds):
                     pedestrians[i].center = self.ped_trajectories[i][frame_num]
 
-            # update time annotation
-            for i in range(len(times)):
-                times[i].set_position((agents[i].center[0] - x_offset, agents[i].center[1] - y_offset))
-                times[i].set_text('{:.1f}'.format(global_time))
+            # # update time annotation
+            # for i in range(len(times)):
+            #     times[i].set_position((agents[i].center[0] - x_offset, agents[i].center[1] - y_offset))
+            #     times[i].set_text('{:.1f}'.format(global_time))
 
             # update robot orientation
             theta = np.arctan2(self.robot_trajectory[frame_num][1] - self.robot_trajectory[frame_num - 1][1],
@@ -384,138 +388,3 @@ class Visualizer:
         else:
             plt.show()
 
-    
-
-
-
-
-def render(self, mode='human', output_file=None):
-
-    plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
-
-    x_offset = 0.11
-    y_offset = 0.11
-    cmap = plt.cm.get_cmap('hsv', 10)
-    # robot_color = 'yellow'
-    goal_color = 'red'
-    arrow_color = 'red'
-    arrow_style = patches.ArrowStyle("->", head_length=4, head_width=2)
-
-    if mode == 'video':
-        fig, ax = plt.subplots(figsize=(7, 7))
-        ax.tick_params(labelsize=16)
-        ax.set_xlim(-6, 6)
-        ax.set_ylim(-6, 6)
-        ax.set_xlabel('x(m)', fontsize=16)
-        ax.set_ylabel('y(m)', fontsize=16)
-
-        # add robot and its goal
-        robot_positions = [state[0].position for state in self.states]
-        goal = mlines.Line2D([0], [4], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
-        robot = plt.Circle(robot_positions[0], self.robot.radius, fill=True, color=self.config.robot_color)
-        ax.add_artist(robot)
-        ax.add_artist(goal)
-        plt.legend([robot, goal], ['Robot', 'Goal'], fontsize=16)
-
-        # add humans and their numbers
-        human_positions = [[state[1][j].position for j in range(len(self.humans))] for state in self.states]
-        humans = [plt.Circle(human_positions[0][i], self.humans[i].radius, fill=False)
-                    for i in range(len(self.humans))]
-        human_numbers = [plt.text(humans[i].center[0] - x_offset, humans[i].center[1] - y_offset, str(i),
-                                    color='black', fontsize=12) for i in range(len(self.humans))]
-        for i, human in enumerate(humans):
-            ax.add_artist(human)
-            ax.add_artist(human_numbers[i])
-
-        # add time annotation
-        time = plt.text(-1, 5, 'Time: {}'.format(0), fontsize=16)
-        ax.add_artist(time)
-
-        # compute orientation in each step and use arrow to show the direction
-        radius = self.robot.radius
-        if self.robot.kinematics == 'unicycle':
-            orientation = [((state[0].px, state[0].py), (state[0].px + radius * np.cos(state[0].theta),
-                                                            state[0].py + radius * np.sin(state[0].theta))) for state
-                            in self.states]
-            orientations = [orientation]
-        else:
-            orientations = []
-            for i in range(self.human_num + 1):
-                orientation = []
-                for state in self.states:
-                    if i == 0:
-                        agent_state = state[0]
-                    else:
-                        agent_state = state[1][i - 1]
-                    theta = np.arctan2(agent_state.vy, agent_state.vx)
-                    orientation.append(((agent_state.px, agent_state.py), (agent_state.px + radius * np.cos(theta),
-                                            agent_state.py + radius * np.sin(theta))))
-                orientations.append(orientation)
-        arrows = [patches.FancyArrowPatch(*orientation[0], color=arrow_color, arrowstyle=arrow_style)
-                    for orientation in orientations]
-
-        for arrow in arrows:
-            ax.add_artist(arrow)
-        global_step = 0
-
-        def update(frame_num):
-            nonlocal global_step
-            nonlocal arrows
-            global_step = frame_num
-            robot.center = robot_positions[frame_num]
-            for i, human in enumerate(humans):
-                human.center = human_positions[frame_num][i]
-                human_numbers[i].set_position((human.center[0] - x_offset, human.center[1] - y_offset))
-                for arrow in arrows:
-                    arrow.remove()
-                arrows = [patches.FancyArrowPatch(*orientation[frame_num], color=arrow_color,
-                                                    arrowstyle=arrow_style) for orientation in orientations]
-                for arrow in arrows:
-                    ax.add_artist(arrow)
-
-            time.set_text('Time: {:.2f}'.format(frame_num * self.time_step))
-
-        def plot_value_heatmap():
-            assert self.robot.kinematics == 'holonomic'
-            for agent in [self.states[global_step][0]] + self.states[global_step][1]:
-                print(('{:.4f}, ' * 6 + '{:.4f}').format(agent.px, agent.py, agent.gx, agent.gy,
-                                                            agent.vx, agent.vy, agent.theta))
-            # when any key is pressed draw the action value plot
-            fig, axis = plt.subplots()
-            speeds = [0] + self.robot.policy.speeds
-            rotations = self.robot.policy.rotations + [np.pi * 2]
-            r, th = np.meshgrid(speeds, rotations)
-            z = np.array(self.action_values[global_step % len(self.states)][1:])
-            z = (z - np.min(z)) / (np.max(z) - np.min(z))
-            z = np.reshape(z, (16, 5))
-            polar = plt.subplot(projection="polar")
-            polar.tick_params(labelsize=16)
-            mesh = plt.pcolormesh(th, r, z, vmin=0, vmax=1)
-            plt.plot(rotations, r, color='k', ls='none')
-            plt.grid()
-            cbaxes = fig.add_axes([0.85, 0.1, 0.03, 0.8])
-            cbar = plt.colorbar(mesh, cax=cbaxes)
-            cbar.ax.tick_params(labelsize=16)
-            plt.show()
-
-        def on_click(event):
-            anim.running ^= True
-            if anim.running:
-                anim.event_source.stop()
-                if hasattr(self.robot.policy, 'action_values'):
-                    plot_value_heatmap()
-            else:
-                anim.event_source.start()
-
-        fig.canvas.mpl_connect('key_press_event', on_click)
-        anim = animation.FuncAnimation(fig, update, frames=len(self.states), interval=self.time_step * 1000)
-        anim.running = True
-
-        if output_file is not None:
-            ffmpeg_writer = animation.writers['ffmpeg']
-            writer = ffmpeg_writer(fps=8, metadata=dict(artist='Me'), bitrate=1800)
-            anim.save(output_file, writer=writer)
-        else:
-            plt.show()
-    else:
-        raise NotImplementedError

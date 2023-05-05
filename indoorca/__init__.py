@@ -21,3 +21,5 @@ agent_diameter = max_agent_radius + min_agent_radius
 #Other global variables
 obstacle_space = 0
 free_space = 1
+radius_meters = 0.125
+radius_pixels = round(radius_meters*pix_per_meter)

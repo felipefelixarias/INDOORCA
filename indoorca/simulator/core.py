@@ -1,9 +1,10 @@
-from typing import List, NamedTuple, Tuple
+from typing import List, NamedTuple, Tuple, Dict
 
 import numpy as np
 
 from .orca import IndoorORCASim, IndoorORCASimConfig
 from indoorca.environment.core import Environment
+import indoorca
 from .position import Position
 
 class Agent():
@@ -50,7 +51,7 @@ class MultiAgentSim:
         self.num_steps_stop_thresh = 20
         # backoff when angle is greater than 135 degrees
         self.backoff_radian_thresh = np.deg2rad(135.0)
-        self.pedestrian_goal_thresh = 0.25
+        self.pedestrian_goal_thresh = indoorca.radius_meters*1.5
         self.personal_space_violation_steps = 0
         self.arrived_at_goal = {}
         self.starts = {}
@@ -60,7 +61,6 @@ class MultiAgentSim:
         if num_agents < 1:
             raise ValueError('Number of agents must be greater than or equal to 1.')
         
-
         #TODO: Add flag to optionally have pedestrians stop rather than back up
 
         """
@@ -91,23 +91,21 @@ class MultiAgentSim:
         self.sim = IndoorORCASim(IndoorORCASimConfig())
         self.sim.trajectories = []
         self.num_agents = num_agents
-        
-
         self.agents = {}
         self.ids = []
         self.agent_waypoints = {}
         self.obstacles = []
-        # self.num_agents = num_agents
+        self.num_agents = num_agents
         self.personal_space_violation_steps = 0
         self.arrived_at_goal = {}
         self.starts = {}
         self.goals = {}
 
-
         self.sim.add_obstacles(self.env.get_obstacle_meters())
         self.sim.process_obstacles()
         
         self.load_agents()
+
 
     def load_obstacles(self) -> None:
         self.env.process_obstacles()
@@ -126,35 +124,6 @@ class MultiAgentSim:
             self.starts[agent.id] = agent.default_pos
             self.goals[agent.id] = agent.default_pos
 
-
-
-    def sample_initial_pos(self, agent_id:int) -> Tuple[float]:#env, ped_id):
-        """
-        Sample a new initial position for pedestrian with ped_id.
-        The inital position is sampled randomly until the position is
-        at least |self.orca_radius| away from all other pedestrians' initial
-        positions and the robot's initial position.
-        """
-
-        if agent_id not in self.ids:
-            raise ValueError("Agent with id {} is not in the simulation.".format(agent_id))
-        
-        # resample pedestrian's initial position
-
-        #resample = True
-        #TODO: Add a max number of resamples
-        #TODO: Add check for if the agent is too close to the robots
-
-        # while resample:
-
-        initial_pos = self.env.get_random_point()
-        # print('initial_pos_from_random_points: ', initial_pos)
-        pos = Position(self.env.obstacle_map.shape)
-        pos.set_position_pix(initial_pos[0], initial_pos[1])
-        initial_pos = (pos.x, pos.y)
-        # print('initial_pos_from_pos_class: ', initial_pos)
-
-        return (initial_pos[0], initial_pos[1])
 
     def reset_pedestrians(self) -> None:
         """
@@ -203,18 +172,46 @@ class MultiAgentSim:
         """
 
         shortest_path, dist = self.env.shortest_path(np.array(start), np.array(goal))
-        # print('#'*50)
-        # print('start: ', start)
-        # print('goal: ', goal)
-        # print('dist: ', dist)
-        # print('len(shortest_path): ', len(shortest_path))
-        #waypoints = self.shortest_path_to_waypoints(shortest_path)
-        #print('len(waypoints): ', len(waypoints))
-        # print('shortest_path: \n', shortest_path)
         return shortest_path.tolist()
     
-    def get_starts_and_goals(self):
-        starts = self.starts
+    def get_trajectories(self) -> List[List[List[float]]]:
+        """
+        Get trajectories of all agents.
+
+        :return trajectories: list of trajectories of all agents
+        """
+        return self.sim.trajectories
+    
+    def set_starts_and_goals(self, starts: Dict[int, Tuple[float, float]], 
+                             goals: Dict[int, Tuple[float, float]]) -> None:
+        """Set the starts and goals for each agent.
+
+        Parameters
+        ----------
+        starts : 
+            Dictionary defining the start positions for each agent.
+        goals :
+            Dictionary defining the goal positions for each agent.
+        """
+
+        #Assert that each agent has start and goal
+        assert sorted(starts.keys()) == sorted(goals.keys())
+
+        self.starts = starts
+        self.goals = goals
+
+        for agent_id, agent in self.agents.items():
+            self.sim.set_agent_position(agent_id, self.starts[agent_id])
+            waypoints = self.get_waypoints(self.starts[agent_id], self.goals[agent_id])
+            self.agent_waypoints[agent_id] = waypoints
+
+
+    
+    def get_rand_starts_and_goals(self, dist_thresh: float = 4.0, num_samples: int = 100) -> \
+                             Tuple[Dict[int, Tuple[float, float]], Dict[int, Tuple[float, float]]]:
+        
+        starts = {}
+        goals = {}
 
         for agent_id, agent in self.agents.items():
             rand_pos = self.env.get_random_point()
@@ -230,12 +227,6 @@ class MultiAgentSim:
                         break
             starts[agent_id] = rand_pos
             agent.set_start_position(rand_pos)
-
-
-        #Tr    
-        goals = self.goals
-        dist_thresh = 4.  # Set the desired minimum distance threshold between start and goal
-        num_samples = 100  # Set the number of samples to be taken
 
         for agent_id, agent in self.agents.items():
             start_pos = starts[agent_id]
@@ -279,6 +270,7 @@ class MultiAgentSim:
                         agent.set_goal_position(furthest_sample)
                         valid_goal = True
 
+        self.set_starts_and_goals(starts, goals)
         return starts, goals
 
     def sample_new_target_pos(self, initial_pos):
@@ -326,9 +318,6 @@ class MultiAgentSim:
                 break
 
         waypoints = self.shortest_path_to_waypoints(shortest_path)
-        print('WAYPOINTS')
-        print(waypoints)
-        print('#'*20)
 
 
         return waypoints
@@ -365,96 +354,82 @@ class MultiAgentSim:
         waypoints.pop(0)
 
         return waypoints
+
     
+    def step(self) -> bool:
 
-    def step(self):
-        """
-        Perform task-specific step: move the pedestrians based on ORCA while
-        disallowing backing up
-
-        :param env: environment instance
-        """
-
-        #TODO: Remove self.pedestrians from everything and instead get everything from simulator
+        for agent_id, agent in self.agents.items():
             
-        for agent_id in self.ids:
-            agent = self.agents[agent_id]
-            #agent_pos = agent.get_position()
             agent_pos = self.sim.get_agent_position(agent_id)
             waypoints = self.agent_waypoints[agent_id]
+            current_pos = agent_pos
 
-            # if len(waypoints) == 0:
-            #     raise ValueError("The waypoints for agent {} is empty".format(
-            #         agent_id))
-            
-            current_pos = np.array(agent_pos)
+            #Check if agent has reached goal
+            if np.linalg.norm(np.array(agent_pos) - np.array(self.goals[agent_id])) < self.pedestrian_goal_thresh:
+                print('Agent {} reached goal'.format(agent_id))
+                temp = self.goals[agent_id]
+                self.goals[agent_id] = self.starts[agent_id]
+                self.starts[agent_id] = temp
 
-            # Sample new waypoints if empty OR
-            # if the pedestrian has stopped for self.num_steps_stop_thresh steps
-            if len(waypoints) == 0 or \
-                    self.num_steps_stop[agent_id] >= self.num_steps_stop_thresh:
-                # if self.offline_eval:
-                #     waypoints = self.sample_new_target_pos(env, current_pos, i)
-                # else:
-                print("Sampling new target position for agent {}".format(agent_id))
+                self.agent_waypoints[agent_id] = self.get_waypoints(current_pos, self.goals[agent_id])
+                self.arrived_at_goal[agent_id] = True
 
-                waypoints = self.sample_new_target_pos(current_pos)
-                self.agent_waypoints[agent_id] = waypoints
-                self.num_steps_stop[agent_id] = 0
+            #Resample for waypoints
+            if len(waypoints) == 0:
+                goal_pos = self.goals[agent_id]
+                self.agent_waypoints[agent_id] = self.get_waypoints(current_pos, goal_pos)   
 
-            # print("Agent {} has {} waypoints".format(agent_id, len(waypoints)))
-            print('Agent {} waypoints: {}'.format(agent_id, waypoints))
-            next_goal = waypoints[0]
-            # self.pedestrian_goals[i].set_position(
-            #     np.array([next_goal[0], next_goal[1], current_pos[2]]))
+                waypoints = self.agent_waypoints[agent_id]
 
-            yaw = np.arctan2(next_goal[1] - current_pos[1],
-                             next_goal[0] - current_pos[0])
-            # agent.set_yaw(yaw)
-            
-            desired_vel = next_goal - current_pos
-            desired_vel = desired_vel / \
-                np.linalg.norm(desired_vel) * self.sim.get_max_speed()
-            self.sim.set_agent_pref_velocity(agent_id, list(desired_vel))
+            #TODO: Implement backing up detection
+
+            next_goal = self.agent_waypoints[agent_id][0]
+            desired_velocity = np.array(next_goal) - np.array(current_pos)
+            desired_velocity = (desired_velocity / np.linalg.norm(desired_velocity)) * self.sim.get_max_speed()
+            self.sim.set_agent_pref_velocity(agent_id, list(desired_velocity))
+
+        if np.all([self.arrived_at_goal[agent_id] for agent_id in self.agents.keys()]):
+            print('All agents have reached their goals')
+            return True
 
         self.sim.do_step()
+    
+        #Check if agent has reached waypoint, if so pop it
+        for agent_id, agent in self.agents.items():
+            agent_pos = self.sim.get_agent_position(agent_id)
+            next_goal = self.agent_waypoints[agent_id][0]
+            if np.linalg.norm(np.array(agent_pos) - np.array(next_goal)) < self.pedestrian_goal_thresh:
+                self.agent_waypoints[agent_id].pop(0)
 
-        # # Update the pedestrian position in PyBullet if it does not stop
+        return False
+    
+    def run(self, num_rounds: int = 1, max_steps: int = 500) -> None:
+        """Function to run the simulation
 
-        next_peds_pos_xyz, next_peds_stop_flag = \
-            self.update_pos_and_stop_flags()
+        Parameters
+        ----------
+        num_rounds : optional
+            The number of times the agents should try to reach their goals, by default 1
+        max_steps : optional
+            The maximum number of timesteps to simulate, by default 500
+        """        
 
-        # Update the pedestrian position in PyBullet if it does not stop
-        # Otherwise, revert back the position in RVO2 simulator
+        done = False
+        for i in range(max_steps):
+            done = self.step()
+            if done:
+                print('Done at step {}'.format(i))
+                num_rounds -= 1
+                self.arrived_at_goal = {agent_id: False for agent_id in self.agents.keys()}
+
+            if num_rounds == 0:
+                break
+
+            if i%100 == 0:
+                print('Step {}'.format(i))     
             
-        for agent_id in self.ids:
-            agent = self.agents[agent_id]
-            waypoints = self.agent_waypoints[agent_id]
-            pos_xyz = next_peds_pos_xyz[agent_id]
-
-            if next_peds_stop_flag[agent_id] is True:
-                # revert back ORCA sim pedestrian to the previous time step
-                self.num_steps_stop[agent_id] += 1
-                self.sim.set_agent_position(agent_id, pos_xyz[:2])
-            else:
-                # advance pybullet pedstrian to the current time step
-                self.num_steps_stop[agent_id] = 0
-                agent.set_position(pos_xyz)
-                next_goal = waypoints[0]
-                if np.linalg.norm(next_goal - np.array(pos_xyz[:2])) \
-                        <= self.pedestrian_goal_thresh:
-                    waypoints.pop(0)
-
-        # Detect robot's personal space violation
-        # personal_space_violation = False
-        # robot_pos = env.robots[0].get_position()[:2]
-        # for agent in self.pedestrians:
-        #     ped_pos = agent.get_position()[:2]
-        #     if l2_distance(robot_pos, ped_pos) < self.orca_radius:
-        #         personal_space_violation = True
-        #         break
-        # if personal_space_violation:
-        #     self.personal_space_violation_steps += 1
+            if i == max_steps - 1:
+                print('Max steps reached')
 
     def update_pos_and_stop_flags(self):
         """
@@ -550,33 +525,3 @@ class MultiAgentSim:
         angle = np.arccos(np.dot(normalized_dir, next_normalized_dir))
         return angle >= self.backoff_radian_thresh
     
-    #TODO: Finish termination condition
-
-    def get_termination(self, env, collision_links=[], action=None, info={}):
-        """
-        Aggreate termination conditions and fill info
-        """
-
-        #TODO: Get done and info flags from simulation
-
-        # done, info = super(SocialNavRandomTask, self).get_termination(
-        #     env, collision_links, action, info)
-        # done = True
-
-        raise NotImplementedError
-
-        # if done:
-        #     info['psc'] = 1.0 - (self.personal_space_violation_steps /
-        #                          env.config.get('max_step', 500))
-        #     if self.offline_eval:
-        #         episode_index = self.episode_config.episode_index
-        #         orca_timesteps = self.episode_config.episodes[episode_index]['orca_timesteps']
-        #         info['stl'] = float(info['success']) * \
-        #             min(1.0, orca_timesteps / env.current_step)
-        #     else:
-        #         info['stl'] = float(info['success'])
-        # else:
-        #     info['psc'] = 0.0
-        #     info['stl'] = 0.0
-
-        # return done, info
