@@ -12,6 +12,7 @@ There are three core features:
 1. A library for processing a binary image of a map and extracting the contours of the obstacles in an ORCA-friendly format
 2. A multi-agent simulator that uses ORCA, waypoint following, and global planning to simulate multiple agents in an environment and stores episode data for later usage
 3. A library for generating videos and images of moving agents in a specified map given their trajectories
+
 For a narrative overview of the features, please take look at the tutorials folder.
 
 ## Building & installing
